@@ -1,3 +1,5 @@
+extern crate core;
+
 // cBPF opcodes
 //
 // see: https://github.com/the-tcpdump-group/libpcap/blob/master/pcap/bpf.h
@@ -137,27 +139,27 @@ pub const BPF_TXA: u16 = 0x80;
 pub const BPF_RET_K: u16 = BPF_RET | BPF_K;
 pub const BPF_RET_A: u16 = BPF_RET | BPF_A;
 
-pub const BPF_LD_W_ABS: u16 = BPF_LD | BPF_W | BPF_ABS;
+// comment out to suppress warnings regarding or-ing 0 (BPF_W is 0)
+pub const BPF_LD_W_ABS: u16 = BPF_LD /*| BPF_W*/ | BPF_ABS;
 pub const BPF_LD_H_ABS: u16 = BPF_LD | BPF_H | BPF_ABS;
 pub const BPF_LD_B_ABS: u16 = BPF_LD | BPF_B | BPF_ABS;
 
 pub const BPF_LD_B_LEN: u16 = BPF_LD | BPF_B | BPF_LEN;
 pub const BPF_LDX_B_LEN: u16 = BPF_LDX | BPF_B | BPF_LEN;
-pub const BPF_LD_W_LEN: u16 = BPF_LD | BPF_W | BPF_LEN;
+pub const BPF_LD_W_LEN: u16 = BPF_LD /*| BPF_W*/ | BPF_LEN;
 pub const BPF_LDX_W_LEN: u16 = BPF_LDX | BPF_W | BPF_LEN;
 
-pub const BPF_LD_W_IND: u16 = BPF_LD | BPF_W | BPF_IND;
+pub const BPF_LD_W_IND: u16 = BPF_LD /*| BPF_W*/ | BPF_IND;
 pub const BPF_LD_H_IND: u16 = BPF_LD | BPF_H | BPF_IND;
 pub const BPF_LD_B_IND: u16 = BPF_LD | BPF_B | BPF_IND;
 
 pub const BPF_LDX_B_MSH: u16 = BPF_LDX | BPF_B | BPF_MSH;
 
-pub const BPF_LD_IMM: u16 = BPF_LD | BPF_IMM;
+pub const BPF_LD_IMM: u16 = BPF_LD /*| BPF_IMM*/;
 pub const BPF_LDX_IMM: u16 = BPF_LDX | BPF_IMM;
 pub const BPF_LD_MEM: u16 = BPF_LD | BPF_MEM;
 pub const BPF_LDX_MEM: u16 = BPF_LDX | BPF_MEM;
 
-pub const BPF_JMP_A: u16 = BPF_JMP | BPF_A;
 pub const BPF_JMP_JA: u16 = BPF_JMP | BPF_JA;
 pub const BPF_JGT_K: u16 = BPF_JMP | BPF_JGT | BPF_K;
 pub const BPF_JGE_K: u16 = BPF_JMP | BPF_JGE | BPF_K;
@@ -199,7 +201,7 @@ pub const BPF_MISC_TXA: u16 = BPF_MISC | BPF_TXA;
 pub const BPF_MEMWORDS: usize = 16;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct BpfInsn {
     pub code: u16,
     pub jt: u8,
@@ -245,5 +247,175 @@ pub fn bpf_miscop(code: u16) -> u16 {
 impl BpfInsn {
     pub fn new(code: u16, jt: u8, jf: u8, k: u32) -> Self {
         Self { code, jt, jf, k }
+    }
+
+    pub fn opname(code: u16) -> &'static str {
+        match code {
+            BPF_RET_K => "RET K",
+            BPF_RET_A => "RET A",
+            BPF_LD_W_ABS => "LD W ABS",
+            BPF_LD_H_ABS => "LD H ABS",
+            BPF_LD_B_ABS => "LD B ABS",
+            BPF_LD_B_LEN => "LD B LEN",
+            BPF_LDX_B_LEN => "LDX B LEN",
+            BPF_LD_W_LEN => "LD W LEN",
+            BPF_LDX_W_LEN => "LDX W LEN",
+
+            BPF_LD_W_IND => "LD W IND",
+            BPF_LD_H_IND => "LD H IND",
+            BPF_LD_B_IND => "LD B IND",
+
+            BPF_LDX_B_MSH => "LDX B MSH",
+
+            BPF_LD_IMM => "LD IMM",
+            BPF_LDX_IMM => "LDX IMM",
+            BPF_LD_MEM => "LD MEM",
+            BPF_LDX_MEM => "LDX MEM",
+
+            BPF_JMP_JA => "JMP JA",
+            BPF_JGT_K => "JGT K",
+            BPF_JGE_K => "JGE K",
+            BPF_JEQ_K => "JEQ K",
+            BPF_JSET_K => "JSET K",
+            BPF_JGT_X => "JGT X",
+            BPF_JGE_X => "JGE X",
+            BPF_JEQ_X => "JEQ X",
+            BPF_JSET_X => "JSET X",
+
+            BPF_ADD_X => "ADD X",
+            BPF_SUB_X => "SUB X",
+            BPF_MUL_X => "MUL X",
+            BPF_DIV_X => "DIV X",
+            BPF_MOD_X => "MOD X",
+            BPF_AND_X => "AND X",
+            BPF_OR_X => "OR X",
+            BPF_XOR_X => "XOR X",
+            BPF_LSH_X => "LSH X",
+            BPF_RSH_X => "RSH X",
+
+            BPF_ADD_K => "ADD K",
+            BPF_SUB_K => "SUB K",
+            BPF_MUL_K => "MUL K",
+            BPF_DIV_K => "DIV K",
+            BPF_MOD_K => "MOD K",
+            BPF_AND_K => "AND K",
+            BPF_OR_K => "OR K",
+            BPF_XOR_K => "XOR K",
+            BPF_LSH_K => "LSH K",
+            BPF_RSH_K => "RSH K",
+
+            BPF_ALU_NEG => "NEG",
+
+            BPF_MISC_TAX => "TAX",
+            BPF_MISC_TXA => "TXA",
+            _ => "UNKNOWN",
+        }
+    }
+}
+
+
+impl core::fmt::Debug for BpfInsn {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> Result<(), core::fmt::Error> {
+        let name = BpfInsn::opname(self.code);
+        write!(
+            f,
+            "{:10} {{code: {:02X}, jt: {:02X}, jf: {:02X}, k: {:08X}}}  ",
+            name,
+            self.code,
+            self.jt,
+            self.jf,
+            self.k,
+        )?;
+
+        match bpf_class(self.code) {
+            BPF_RET => {
+                write!(f, "ret ")?;
+                match bpf_rval(self.code) {
+                    BPF_K => write!(f, "{}", self.k)?,
+                    BPF_A => write!(f, "A",)?,
+                    _ => write!(f, "?")?,
+                }
+            }
+
+            n @ BPF_LD | n @ BPF_LDX => {
+                if n == BPF_LD {
+                    write!(f, "ld")?;
+                } else {
+                    write!(f, "ldx")?;
+                }
+                match bpf_size(self.code) {
+                    BPF_W => write!(f, "w")?,
+                    BPF_H => write!(f, "h")?,
+                    BPF_B => write!(f, "b")?,
+                    _ => write!(f, "?")?,
+                }
+                match bpf_mode(self.code) {
+                    BPF_ABS => write!(f, " [{}]", self.k)?,
+                    BPF_IND => write!(f, " [{}+X]", self.k)?,
+                    BPF_IMM => write!(f, " {}", self.k)?,
+                    BPF_LEN => write!(f, " len")?,
+                    _ => write!(f, " ?")?,
+                }
+            }
+
+            n @ BPF_ST | n @ BPF_STX => if n == BPF_ST {
+                write!(f, "st [{}]", self.k)?;
+            } else {
+                write!(f, "stx [{}]", self.k)?;
+            },
+
+            BPF_JMP => {
+                match bpf_op(self.code) {
+                    BPF_JA => write!(f, "jmp")?,
+                    BPF_JGT => write!(f, "jgt")?,
+                    BPF_JGE => write!(f, "jge")?,
+                    BPF_JEQ => write!(f, "jeq")?,
+                    BPF_JSET => write!(f, "jset")?,
+                    _ => write!(f, "?")?,
+                }
+                if bpf_op(self.code) != BPF_JA {
+                    match bpf_src(self.code) {
+                        BPF_K => write!(f, " {}", self.k)?,
+                        BPF_X => write!(f, " X")?,
+                        _ => write!(f, " ?")?,
+                    }
+                    write!(f, " {} {}", self.jt, self.jf)?;
+                }
+            }
+
+            BPF_ALU => {
+                match bpf_op(self.code) {
+                    BPF_ADD => write!(f, "add")?,
+                    BPF_SUB => write!(f, "sub")?,
+                    BPF_MUL => write!(f, "mul")?,
+                    BPF_DIV => write!(f, "div")?,
+                    BPF_MOD => write!(f, "mod")?,
+                    BPF_AND => write!(f, "and")?,
+                    BPF_OR => write!(f, "or")?,
+                    BPF_XOR => write!(f, "xor")?,
+                    BPF_LSH => write!(f, "lsh")?,
+                    BPF_RSH => write!(f, "rsh")?,
+                    BPF_NEG => write!(f, "neg")?,
+                    _ => write!(f, "?")?,
+                }
+                if bpf_op(self.code) != BPF_NEG {
+                    match bpf_src(self.code) {
+                        BPF_X => write!(f, " X")?,
+                        BPF_K => write!(f, " {}", self.k)?,
+                        _ => write!(f, " ?")?,
+                    }
+                }
+            }
+
+            BPF_MISC => match bpf_miscop(self.code) {
+                BPF_TAX => write!(f, "tax")?,
+                BPF_TXA => write!(f, "txa")?,
+                _ => write!(f, "?")?,
+            },
+
+            _ => {}
+        }
+
+        Ok(())
     }
 }
