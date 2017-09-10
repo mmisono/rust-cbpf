@@ -353,6 +353,7 @@ impl core::fmt::Debug for BpfInsn {
                     BPF_IND => write!(f, " [{}+X]", self.k)?,
                     BPF_IMM => write!(f, " {}", self.k)?,
                     BPF_LEN => write!(f, " len")?,
+                    BPF_MSH => write!(f, " ([{}] & 0xf) << 2", self.k)?,
                     _ => write!(f, " ?")?,
                 }
             }
