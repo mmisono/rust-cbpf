@@ -38,8 +38,8 @@ impl Interpreter for Simple {
             match bpf_class(insn.code) {
                 BPF_RET => {
                     return match bpf_rval(insn.code) {
-                        BPF_K => Ok(insn.k),
                         BPF_A => Ok(A),
+                        BPF_K => Ok(insn.k),
                         _ => Err(InvalidRval),
                     }
                 }
