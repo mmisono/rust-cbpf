@@ -13,7 +13,7 @@ pub struct Simple;
 
 impl Interpreter for Simple {
     /// Simple `cBPF` interpreter based on [libpcap implementation](https://github.com/the-tcpdump-group/libpcap/blob/master/bpf/net/bpf_filter.c)
-    /// Currently if interpreter find illegal opcode, program will panic.
+    /// If interpreter find illegal opcode, program retrun Error.
     /// Verifier should detect such problems before execution.
     /// `data` is supposed to be big endian (network byteorder)
     fn run(insns: &[BpfInsn], data: &[u8]) -> Result<u32, ::Error> {
@@ -31,7 +31,7 @@ impl Interpreter for Simple {
         let mut pc = 0;
 
         loop {
-            if pc > insns.len() {
+            if pc >= insns.len() {
                 return Err(PcOutOfRange);
             }
             let insn = insns[pc];
@@ -40,28 +40,28 @@ impl Interpreter for Simple {
                     return match bpf_rval(insn.code) {
                         BPF_K => Ok(insn.k),
                         BPF_A => Ok(A),
-                        _ => Err(InvalidInstruction),
+                        _ => Err(InvalidRval),
                     }
                 }
 
                 BPF_LD => match (bpf_size(insn.code), bpf_mode(insn.code)) {
-                    (BPF_W, BPF_ABS) => {
-                        let k = insn.k as usize;
-                        if k > data.len() || size_of::<u32>() > data.len() - k {
+                    (BPF_W, n @ BPF_ABS) | (BPF_W, n @ BPF_IND) => {
+                        let k = (insn.k + { if n == BPF_IND { X } else { 0 } }) as usize;
+                        if k >= data.len() || size_of::<u32>() > data.len() - k {
                             return Err(OutOfRange);
                         }
                         A = BigEndian::read_u32(&data[k..]);
                     }
-                    (BPF_H, BPF_ABS) => {
-                        let k = insn.k as usize;
-                        if k > data.len() || size_of::<u16>() > data.len() - k {
+                    (BPF_H, n @ BPF_ABS) | (BPF_H, n @ BPF_IND) => {
+                        let k = (insn.k + { if n == BPF_IND { X } else { 0 } }) as usize;
+                        if k >= data.len() || size_of::<u16>() > data.len() - k {
                             return Err(OutOfRange);
                         }
                         A = u32::from(BigEndian::read_u16(&data[k..]));
                     }
-                    (BPF_B, BPF_ABS) => {
-                        let k = insn.k as usize;
-                        if k > data.len() {
+                    (BPF_B, n @ BPF_ABS) | (BPF_B, n @ BPF_IND) => {
+                        let k = (insn.k + { if n == BPF_IND { X } else { 0 } }) as usize;
+                        if k >= data.len() {
                             return Err(OutOfRange);
                         }
                         A = u32::from(data[k]);
@@ -69,28 +69,6 @@ impl Interpreter for Simple {
 
                     (BPF_W, BPF_LEN) => {
                         A = data.len() as u32;
-                    }
-
-                    (BPF_W, BPF_IND) => {
-                        let k = (X + insn.k) as usize;
-                        if k > data.len() || size_of::<u32>() > data.len() - k {
-                            return Err(OutOfRange);
-                        }
-                        A = BigEndian::read_u32(&data[k..]);
-                    }
-                    (BPF_H, BPF_IND) => {
-                        let k = (X + insn.k) as usize;
-                        if k > data.len() || size_of::<u16>() > data.len() - k {
-                            return Err(OutOfRange);
-                        }
-                        A = u32::from(BigEndian::read_u16(&data[k..]));
-                    }
-                    (BPF_B, BPF_IND) => {
-                        let k = (X + insn.k) as usize;
-                        if k > data.len() {
-                            return Err(OutOfRange);
-                        }
-                        A = u32::from(data[k]);
                     }
 
                     (BPF_W, BPF_IMM) => {
@@ -98,220 +76,106 @@ impl Interpreter for Simple {
                     }
                     (BPF_W, BPF_MEM) => {
                         let k = insn.k as usize;
-                        if k > mem.len() {
+                        if k >= mem.len() {
                             return Err(OutOfRange);
                         }
-                        A = mem[insn.k as usize];
+                        A = mem[k];
                     }
-                    _ => return Err(InvalidInstruction),
+                    _ => return Err(InvalidLdInstruction),
                 },
 
                 BPF_LDX => match (bpf_size(insn.code), bpf_mode(insn.code)) {
                     (BPF_W, BPF_LEN) => {
-                        A = data.len() as u32;
+                        X = data.len() as u32;
                     }
-                    (_, BPF_B) => if bpf_mode(insn.code) == BPF_MSH {
+                    (BPF_B, BPF_MSH) => {
                         let k = insn.k as usize;
-                        if k > data.len() {
+                        if k >= data.len() {
                             return Err(OutOfRange);
                         }
                         X = u32::from((data[k] & 0xf) << 2);
-                    } else {
-                        return Err(InvalidInstruction);
-                    },
-                    (_, BPF_IMM) => {
+                    }
+                    (BPF_W, BPF_IMM) => {
                         X = insn.k;
                     }
-                    (_, BPF_MEM) => {
+                    (BPF_W, BPF_MEM) => {
                         let k = insn.k as usize;
                         if k > mem.len() {
                             return Err(OutOfRange);
                         }
                         X = mem[k];
                     }
-                    _ => return Err(InvalidInstruction),
+                    _ => return Err(InvalidLdInstruction),
                 },
 
-                BPF_ST => {
+                n @ BPF_ST | n @ BPF_STX => {
                     let k = insn.k as usize;
-                    if k > mem.len() {
+                    if k >= mem.len() {
                         return Err(OutOfRange);
                     }
-                    mem[k] = A;
+                    mem[k] = if n == BPF_ST { A } else { X };
                 }
 
-                BPF_STX => {
-                    let k = insn.k as usize;
-                    if k > mem.len() {
-                        return Err(OutOfRange);
-                    }
-                    mem[k] = X;
-                }
+                BPF_JMP => if bpf_op(insn.code) == BPF_JA {
+                    pc += insn.k as usize;
+                } else {
+                    let src = match bpf_src(insn.code) {
+                        BPF_K => insn.k,
+                        BPF_X => X,
+                        _ => return Err(InvalidSrc),
+                    };
 
-                BPF_JMP => match (bpf_op(insn.code), bpf_src(insn.code)) {
-                    (BPF_JA, _) => {
-                        pc += insn.k as usize;
-                    }
-                    (BPF_JGT, BPF_K) => {
-                        pc += {
-                            if A > insn.k {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    (BPF_JGE, BPF_K) => {
-                        pc += {
-                            if A >= insn.k {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    (BPF_JEQ, BPF_K) => {
-                        pc += {
-                            if A == insn.k {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    (BPF_JSET, BPF_K) => {
-                        pc += {
-                            if (A & insn.k) > 0 {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    (BPF_JGT, BPF_X) => {
-                        pc += {
-                            if X > insn.k {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    (BPF_JGE, BPF_X) => {
-                        pc += {
-                            if X >= insn.k {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    (BPF_JEQ, BPF_X) => {
-                        pc += {
-                            if X == insn.k {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    (BPF_JSET, BPF_X) => {
-                        pc += {
-                            if (X & insn.k) > 0 {
-                                insn.jt as usize
-                            } else {
-                                insn.jf as usize
-                            }
-                        };
-                    }
-                    _ => return Err(InvalidInstruction),
+                    let cond = match bpf_op(insn.code) {
+                        BPF_JGT => A > src,
+                        BPF_JGE => A >= src,
+                        BPF_JEQ => A == src,
+                        BPF_JSET => (A & src) > 0,
+                        _ => return Err(InvalidJmpCondition),
+                    };
+
+                    pc += if cond {
+                        insn.jt as usize
+                    } else {
+                        insn.jf as usize
+                    };
                 },
 
-                BPF_ALU => match (bpf_op(insn.code), bpf_src(insn.code)) {
-                    (BPF_ADD, BPF_X) => {
-                        A += X;
-                    }
-                    (BPF_SUB, BPF_X) => {
-                        A -= X;
-                    }
-                    (BPF_MUL, BPF_X) => {
-                        A *= X;
-                    }
-                    (BPF_DIV, BPF_X) => {
-                        if X == 0 {
-                            return Err(DivisionByZero);
-                        }
-                        A /= X;
-                    }
-                    (BPF_MOD, BPF_X) => {
-                        if X == 0 {
-                            return Err(DivisionByZero);
-                        }
-                        A %= X;
-                    }
-                    (BPF_AND, BPF_X) => {
-                        A &= X;
-                    }
-                    (BPF_OR, BPF_X) => {
-                        A |= X;
-                    }
-                    (BPF_XOR, BPF_X) => {
-                        A ^= X;
-                    }
-                    (BPF_LSH, BPF_X) => {
-                        A <<= X;
-                    }
-                    (BPF_RSH, BPF_X) => {
-                        A >>= X;
-                    }
+                BPF_ALU => if bpf_op(insn.code) == BPF_NEG {
+                    A = (-(A as i32)) as u32;
+                } else {
+                    let src = match bpf_src(insn.code) {
+                        BPF_K => insn.k,
+                        BPF_X => X,
+                        _ => return Err(InvalidSrc),
+                    };
 
-                    (BPF_ADD, BPF_K) => {
-                        A += insn.k;
-                    }
-                    (BPF_SUB, BPF_K) => {
-                        A -= insn.k;
-                    }
-                    (BPF_MUL, BPF_K) => {
-                        A *= insn.k;
-                    }
-                    (BPF_DIV, BPF_K) => {
-                        if insn.k == 0 {
-                            return Err(DivisionByZero);
+                    match bpf_op(insn.code) {
+                        BPF_ADD => A += src,
+                        BPF_SUB => A -= src,
+                        BPF_MUL => A *= src,
+                        n @ BPF_DIV | n @ BPF_MOD => {
+                            if src == 0 {
+                                return Err(DivisionByZero);
+                            }
+                            if n == BPF_DIV {
+                                A /= src;
+                            } else {
+                                A %= src;
+                            }
                         }
-                        A /= insn.k;
+                        BPF_AND => A &= src,
+                        BPF_OR => A |= src,
+                        BPF_XOR => A ^= src,
+                        BPF_LSH => A <<= src,
+                        BPF_RSH => A >>= src,
+                        _ => return Err(InvalidAluOp),
                     }
-                    (BPF_MOD, BPF_K) => {
-                        if insn.k == 0 {
-                            return Err(DivisionByZero);
-                        }
-                        A %= insn.k;
-                    }
-                    (BPF_AND, BPF_K) => {
-                        A &= insn.k;
-                    }
-                    (BPF_OR, BPF_K) => {
-                        A |= insn.k;
-                    }
-                    (BPF_XOR, BPF_K) => {
-                        A ^= insn.k;
-                    }
-                    (BPF_LSH, BPF_K) => {
-                        A <<= insn.k;
-                    }
-                    (BPF_RSH, BPF_K) => {
-                        A >>= insn.k;
-                    }
-
-                    (BPF_NEG, _) => {
-                        A = (-(A as i32)) as u32;
-                    }
-                    _ => return Err(InvalidInstruction),
                 },
 
                 BPF_MISC => match bpf_miscop(insn.code) {
                     BPF_TAX => X = A,
                     BPF_TXA => A = X,
-                    _ => return Err(InvalidInstruction),
+                    _ => return Err(InvalidMiscOp),
                 },
 
                 _ => return Err(InvalidInstruction),
@@ -352,7 +216,7 @@ mod test {
             BpfInsn::new(BPF_RET_K, 0, 0, 0),
         ];
 
-        // arp packet
+        // arp request packet
         let data: &[u8] = &[
             0xff,
             0xff,

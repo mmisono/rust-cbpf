@@ -338,10 +338,9 @@ impl core::fmt::Debug for BpfInsn {
             }
 
             n @ BPF_LD | n @ BPF_LDX => {
-                if n == BPF_LD {
-                    write!(f, "ld")?;
-                } else {
-                    write!(f, "ldx")?;
+                write!(f, "ld")?;
+                if n == BPF_LDX {
+                    write!(f, "x")?;
                 }
                 match bpf_size(self.code) {
                     BPF_W => write!(f, "w")?,
@@ -358,11 +357,9 @@ impl core::fmt::Debug for BpfInsn {
                 }
             }
 
-            n @ BPF_ST | n @ BPF_STX => if n == BPF_ST {
-                write!(f, "st [{}]", self.k)?;
-            } else {
-                write!(f, "stx [{}]", self.k)?;
-            },
+            n @ BPF_ST | n @ BPF_STX => {
+                write!(f, "st{} [{}]", if n == BPF_STX { "x" } else { "" }, self.k)?;
+            }
 
             BPF_JMP => {
                 match bpf_op(self.code) {
@@ -371,9 +368,11 @@ impl core::fmt::Debug for BpfInsn {
                     BPF_JGE => write!(f, "jge")?,
                     BPF_JEQ => write!(f, "jeq")?,
                     BPF_JSET => write!(f, "jset")?,
-                    _ => write!(f, "?")?,
+                    _ => write!(f, "jmp?")?,
                 }
-                if bpf_op(self.code) != BPF_JA {
+                if bpf_op(self.code) == BPF_JA {
+                    write!(f, " {}", self.k)?;
+                } else {
                     match bpf_src(self.code) {
                         BPF_K => write!(f, " {}", self.k)?,
                         BPF_X => write!(f, " X")?,
@@ -396,12 +395,12 @@ impl core::fmt::Debug for BpfInsn {
                     BPF_LSH => write!(f, "lsh")?,
                     BPF_RSH => write!(f, "rsh")?,
                     BPF_NEG => write!(f, "neg")?,
-                    _ => write!(f, "?")?,
+                    _ => write!(f, "alu?")?,
                 }
                 if bpf_op(self.code) != BPF_NEG {
                     match bpf_src(self.code) {
-                        BPF_X => write!(f, " X")?,
                         BPF_K => write!(f, " {}", self.k)?,
+                        BPF_X => write!(f, " X")?,
                         _ => write!(f, " ?")?,
                     }
                 }
@@ -410,10 +409,10 @@ impl core::fmt::Debug for BpfInsn {
             BPF_MISC => match bpf_miscop(self.code) {
                 BPF_TAX => write!(f, "tax")?,
                 BPF_TXA => write!(f, "txa")?,
-                _ => write!(f, "?")?,
+                _ => write!(f, "misc?")?,
             },
 
-            _ => {}
+            _ => write!(f, "unknown")?,
         }
 
         Ok(())
