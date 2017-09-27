@@ -261,6 +261,9 @@ impl BpfInsn {
             BPF_LD_W_LEN => "LD W LEN",
             BPF_LDX_W_LEN => "LDX W LEN",
 
+            BPF_ST => "ST",
+            BPF_STX => "STX",
+
             BPF_LD_W_IND => "LD W IND",
             BPF_LD_H_IND => "LD H IND",
             BPF_LD_B_IND => "LD B IND",
@@ -354,12 +357,18 @@ impl core::fmt::Debug for BpfInsn {
                     BPF_IMM => write!(f, " {}", self.k)?,
                     BPF_LEN => write!(f, " len")?,
                     BPF_MSH => write!(f, " ([{}] & 0xf) << 2", self.k)?,
+                    BPF_MEM => write!(f, " MEM[{}]", self.k)?,
                     _ => write!(f, " ?")?,
                 }
             }
 
             n @ BPF_ST | n @ BPF_STX => {
-                write!(f, "st{} [{}]", if n == BPF_STX { "x" } else { "" }, self.k)?;
+                write!(
+                    f,
+                    "st{} MEM[{}]",
+                    if n == BPF_STX { "x" } else { "" },
+                    self.k
+                )?;
             }
 
             BPF_JMP => {
