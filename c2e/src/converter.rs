@@ -285,7 +285,7 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
                             imm: 0xf,
                         },
                         Insn {
-                            opc: ebpf::LSH32_REG,
+                            opc: ebpf::LSH32_IMM,
                             src: 0,
                             dst: REG_X,
                             off: 0,
@@ -475,8 +475,8 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
                     prog.push(vec![
                         Insn {
                             opc: ebpf::MOV32_REG,
-                            src: REG_X,
-                            dst: REG_A,
+                            src: REG_A,
+                            dst: REG_X,
                             off: 0,
                             imm: 0,
                         },
@@ -486,8 +486,8 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
                     prog.push(vec![
                         Insn {
                             opc: ebpf::MOV32_REG,
-                            src: REG_A,
-                            dst: REG_X,
+                            src: REG_X,
+                            dst: REG_A,
                             off: 0,
                             imm: 0,
                         },
@@ -733,6 +733,24 @@ mod test {
         rbpf::disassembler::disassemble(&ebpf_prog);
         assert_eq!(&ebpf_prog, &to_bytes(&ebpf_insns));
 
+        let cr = { Simple::run(&insns, &data).unwrap() };
+        let vm = rbpf::EbpfVmRaw::new(&ebpf_prog);
+        let er = vm.prog_exec(&mut data);
+        assert_eq!(cr, er as u32);
+    }
+
+    #[test]
+    fn test3() {
+        let insns = [
+            BpfInsn::new(BPF_LDX_B_MSH, 0, 0, 3),
+            BpfInsn::new(BPF_MISC_TXA, 0, 0, 0),
+            BpfInsn::new(BPF_RET_A, 0, 0, 0),
+        ];
+        let ebpf_prog = convert(&insns).unwrap();
+        println!("------");
+        rbpf::disassembler::disassemble(&ebpf_prog);
+
+        let mut data: &mut [u8] = &mut [0x11, 0x12, 0x13, 0x14];
         let cr = { Simple::run(&insns, &data).unwrap() };
         let vm = rbpf::EbpfVmRaw::new(&ebpf_prog);
         let er = vm.prog_exec(&mut data);
