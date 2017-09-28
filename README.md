@@ -1,4 +1,6 @@
 # cbpf-rust
+![https://travis-ci.org/mmisono/rust-cbpf](https://travis-ci.org/mmisono/rust-cbpf.svg?branch=master)
+
 This repository have two crates:
 
 - [`cbpf`](./cbpf) : Userspace cBPF interpreter which can be run in a `no-std`
