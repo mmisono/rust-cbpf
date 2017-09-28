@@ -1,0 +1,2 @@
+[workspace]
+members = ["./cbpf", "./c2e"]
