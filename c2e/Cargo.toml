@@ -5,7 +5,6 @@ authors = ["Masanori Misono <m.misono760@gmail.com>"]
 
 [dependencies]
 cbpf = {path = "../cbpf"}
-# use master version to use insn_builder
 rbpf = { git = "https://github.com/qmonnet/rbpf" }
 
 byteorder = "1.1"
@@ -17,12 +16,11 @@ structopt-derive = {version = "0.1.0", optional = true}
 # see: https://github.com/ebfull/pcap/pull/56
 pcap = { git = "https://github.com/polachok/pcap", branch="offline-bpf", optional = true}
 
-#[features]
-#default = ["std", "pcap", "structopt", "structopt-derive", "error-chain"]
-#std = []
+[features]
+default = ["pcap", "structopt", "structopt-derive", "error-chain"]
 
-#[[bin]]
-#name = "c2e"
-#path = "src/bin/c2e.rs"
-#required-features = ["std", "structopt", "structopt-derive", "error-chain"]
+[[bin]]
+name = "c2e"
+path = "src/bin/c2e.rs"
+required-features = ["pcap", "structopt", "structopt-derive", "error-chain"]
 
