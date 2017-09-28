@@ -4,7 +4,7 @@ Convert a cBPF program to the eBPF program.
 This program use [rbpf](https://github.com/qmonnet/rbpf)'s eBPF codes.
 
 ## Note
-Currently, this program is especially for the [ubpf]((https://github.com/iovisor/ubpf) VM.
+Currently, this program is especially for the [ubpf](https://github.com/iovisor/ubpf) VM.
 ubpf VM does not support `ABS/IND/LEN` memory modes.
 This program use `LDX` instruction instead of `LD_ABS` and `LD_IND`. `LD_LEN` is not supported.
 
