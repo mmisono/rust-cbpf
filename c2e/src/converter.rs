@@ -104,6 +104,7 @@ mod reg {
     // we use R0 for REG_A and R6 for REG_X. This can be changed
     pub const REG_A: u8 = R0;
     pub const REG_X: u8 = R6;
+    pub const REG_TMP: u8 = R7;
 }
 use self::reg::*;
 
@@ -193,6 +194,7 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
 
             // XXX: ubpf does not suport ABS/IND/LEN mode (rbpf does ABS/IND mode)
             // for LD_ABS, use LDX instruction to load data via R1 (R1 is the first argument)
+            // for LD_IND, use REG_TMP (R7) register as offset register and use LDX instruction
             // for LD_MEM, use stack (R10) as memory
             // Note that the type of offset of LDX is i16, while that of imm of cBPF is u32
             // TODO: offset overflow check
@@ -239,9 +241,91 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
                             imm: 0,
                         },
                     ]),
-                    (BPF_W, BPF_IND) => return Err(InvalidInstruction),
-                    (BPF_H, BPF_IND) => return Err(InvalidInstruction),
-                    (BPF_B, BPF_IND) => return Err(InvalidInstruction),
+                    (BPF_W, BPF_IND) => prog.push(vec![
+                        // REG_TMP <= R1 + REG_X
+                        // REG_A <= [REG_TMP]
+                        Insn {
+                            opc: ebpf::MOV64_REG,
+                            src: R1,
+                            dst: REG_TMP,
+                            off: 0,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::ADD64_REG,
+                            src: REG_X,
+                            dst: REG_TMP,
+                            off: 0,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::LD_W_REG,
+                            src: REG_TMP,
+                            dst: REG_A,
+                            off: insn.k as i16,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::BE,
+                            src: 0,
+                            dst: REG_A,
+                            off: 0,
+                            imm: 32,
+                        },
+                    ]),
+                    (BPF_H, BPF_IND) => prog.push(vec![
+                        Insn {
+                            opc: ebpf::MOV64_REG,
+                            src: R1,
+                            dst: REG_TMP,
+                            off: 0,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::ADD64_REG,
+                            src: REG_X,
+                            dst: REG_TMP,
+                            off: 0,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::LD_H_REG,
+                            src: REG_TMP,
+                            dst: REG_A,
+                            off: insn.k as i16,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::BE,
+                            src: 0,
+                            dst: REG_A,
+                            off: 0,
+                            imm: 16,
+                        },
+                    ]),
+                    (BPF_B, BPF_IND) => prog.push(vec![
+                        Insn {
+                            opc: ebpf::MOV64_REG,
+                            src: R1,
+                            dst: REG_TMP,
+                            off: 0,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::ADD64_REG,
+                            src: REG_X,
+                            dst: REG_TMP,
+                            off: 0,
+                            imm: 0,
+                        },
+                        Insn {
+                            opc: ebpf::LD_B_REG,
+                            src: REG_TMP,
+                            dst: REG_A,
+                            off: insn.k as i16,
+                            imm: 0,
+                        },
+                    ]),
                     (BPF_W, BPF_LEN) => return Err(InvalidInstruction),
                     (BPF_W, BPF_IMM) => prog.push(vec![
                         Insn {
@@ -526,6 +610,7 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
 
 
 // TODO: write more tests
+// run `RUST_TEST_THREADS=1 cargo test -- --nocapture` to check output
 #[cfg(test)]
 mod test {
     use super::*;
@@ -801,6 +886,114 @@ mod test {
         let vm = rbpf::EbpfVmRaw::new(&ebpf_prog);
         let er = vm.prog_exec(&mut data);
         println!("{}", cr);
+        assert_eq!(cr, er as u32);
+    }
+
+    #[test]
+    fn test6() {
+        let insns = [
+            BpfInsn::new(BPF_LDX_B_MSH, 0, 0, 0),
+            BpfInsn::new(BPF_LD_W_IND, 0, 0, 1),
+            BpfInsn::new(BPF_RET_A, 0, 0, 0),
+        ];
+        let ebpf_prog = convert(&insns).unwrap();
+        println!();
+        rbpf::disassembler::disassemble(&ebpf_prog);
+
+        let mut data: &mut [u8] = &mut [
+            0x2,
+            0x1,
+            0x2,
+            0x3,
+            0x4,
+            0x5,
+            0x6,
+            0x7,
+            0x8,
+            0x12,
+            0x34,
+            0x56,
+            0x78,
+            0x9a,
+            0xbc,
+            0xde,
+        ];
+        let cr = { Simple::run(&insns, &data).unwrap() };
+        let vm = rbpf::EbpfVmRaw::new(&ebpf_prog);
+        let er = vm.prog_exec(&mut data);
+        println!("0x{:x}", cr);
+        assert_eq!(cr, er as u32);
+    }
+
+    #[test]
+    fn test7() {
+        let insns = [
+            BpfInsn::new(BPF_LDX_B_MSH, 0, 0, 0),
+            BpfInsn::new(BPF_LD_H_IND, 0, 0, 1),
+            BpfInsn::new(BPF_RET_A, 0, 0, 0),
+        ];
+        let ebpf_prog = convert(&insns).unwrap();
+        println!();
+        rbpf::disassembler::disassemble(&ebpf_prog);
+
+        let mut data: &mut [u8] = &mut [
+            0x2,
+            0x1,
+            0x2,
+            0x3,
+            0x4,
+            0x5,
+            0x6,
+            0x7,
+            0x8,
+            0x12,
+            0x34,
+            0x56,
+            0x78,
+            0x9a,
+            0xbc,
+            0xde,
+        ];
+        let cr = { Simple::run(&insns, &data).unwrap() };
+        let vm = rbpf::EbpfVmRaw::new(&ebpf_prog);
+        let er = vm.prog_exec(&mut data);
+        println!("0x{:x}", cr);
+        assert_eq!(cr, er as u32);
+    }
+
+    #[test]
+    fn test8() {
+        let insns = [
+            BpfInsn::new(BPF_LDX_B_MSH, 0, 0, 0),
+            BpfInsn::new(BPF_LD_B_IND, 0, 0, 1),
+            BpfInsn::new(BPF_RET_A, 0, 0, 0),
+        ];
+        let ebpf_prog = convert(&insns).unwrap();
+        println!();
+        rbpf::disassembler::disassemble(&ebpf_prog);
+
+        let mut data: &mut [u8] = &mut [
+            0x2,
+            0x1,
+            0x2,
+            0x3,
+            0x4,
+            0x5,
+            0x6,
+            0x7,
+            0x8,
+            0x12,
+            0x34,
+            0x56,
+            0x78,
+            0x9a,
+            0xbc,
+            0xde,
+        ];
+        let cr = { Simple::run(&insns, &data).unwrap() };
+        let vm = rbpf::EbpfVmRaw::new(&ebpf_prog);
+        let er = vm.prog_exec(&mut data);
+        println!("0x{:x}", cr);
         assert_eq!(cr, er as u32);
     }
 }
