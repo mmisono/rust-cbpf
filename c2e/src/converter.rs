@@ -192,7 +192,7 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
                 }
             }
 
-            // XXX: ubpf does not suport ABS/IND/LEN mode (rbpf does ABS/IND mode)
+            // XXX: ubpf does not support ABS/IND/LEN mode (rbpf does ABS/IND mode)
             // for LD_ABS, use LDX instruction to load data via R1 (R1 is the first argument)
             // for LD_IND, use REG_TMP (R7) register as offset register and use LDX instruction
             // for LD_MEM, use stack (R10) as memory
@@ -444,7 +444,8 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
                             BPF_JSET => ebpf::JSET_IMM,
                             _ => return Err(InvalidJmpCondition),
                         };
-                        prog.push(vec![
+                        // TODO: optimization if insn.jt == 0
+                        let mut is = vec![
                             Insn {
                                 opc: opc,
                                 src: 0,
@@ -452,14 +453,17 @@ pub fn convert(insns: &[BpfInsn]) -> Result<Vec<u8>, Error> {
                                 off: insn.jt as i16,
                                 imm: insn.k as i32,
                             },
-                            Insn {
+                        ];
+                        if insn.jf != 0 {
+                            is.push(Insn {
                                 opc: ebpf::JA,
                                 src: 0,
                                 dst: 0,
                                 off: insn.jf as i16,
                                 imm: 0,
-                            },
-                        ]);
+                            });
+                        }
+                        prog.push(is);
                     }
 
                     BPF_X => {
