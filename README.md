@@ -1,5 +1,5 @@
 # cbpf-rust
-![https://travis-ci.org/mmisono/rust-cbpf](https://travis-ci.org/mmisono/rust-cbpf.svg?branch=master)
+[![Linux Build Status](https://travis-ci.org/mmisono/rust-cbpf.svg?branch=master)](https://travis-ci.org/mmisono/rust-cbpf)
 
 This repository have two crates:
 
